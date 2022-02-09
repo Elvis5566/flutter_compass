@@ -16,16 +16,15 @@ import android.util.Log;
 import android.view.Surface;
 import android.view.WindowManager;
 
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.EventChannel.EventSink;
 import io.flutter.plugin.common.EventChannel.StreamHandler;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
 
-public final class FlutterCompassPlugin implements StreamHandler {
+public final class FlutterCompassPlugin implements FlutterPlugin, StreamHandler {
     private static final String TAG = "FlutterCompass";
     // The rate sensor events will be delivered at. As the Android documentation states, this is only
     // a hint to the system and the events might actually be received faster or slower then this
@@ -41,8 +40,8 @@ public final class FlutterCompassPlugin implements StreamHandler {
 
     private SensorEventListener sensorEventListener;
 
-    private final WindowManager windowManager;
-    private final SensorManager sensorManager;
+    private WindowManager windowManager;
+    private SensorManager sensorManager;
 
     @Nullable
     private Sensor compassSensor;
@@ -61,6 +60,9 @@ public final class FlutterCompassPlugin implements StreamHandler {
     private float[] gravityValues = new float[3];
     private float[] magneticValues = new float[3];
 
+    public FlutterCompassPlugin() {
+        // no-op
+    }
 
     private FlutterCompassPlugin(Context context) {
         windowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
@@ -75,9 +77,14 @@ public final class FlutterCompassPlugin implements StreamHandler {
         magneticFieldSensor = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD);
     }
 
-    public static void registerWith(Registrar registrar) {
-        EventChannel channel = new EventChannel(registrar.messenger(), "hemanthraj/flutter_compass");
-        channel.setStreamHandler(new FlutterCompassPlugin(registrar.context()));
+    @Override
+    public void onAttachedToEngine(FlutterPluginBinding binding) {
+        EventChannel channel = new EventChannel(binding.getBinaryMessenger(), "hemanthraj/flutter_compass");
+        channel.setStreamHandler(new FlutterCompassPlugin(binding.getApplicationContext()));
+    }
+
+    @Override
+    public void onDetachedFromEngine(FlutterPluginBinding binding) {
     }
 
     public void onListen(Object arguments, EventSink events) {
@@ -258,15 +265,17 @@ public final class FlutterCompassPlugin implements StreamHandler {
                 SensorManager.getOrientation(adjustedRotationMatrix, orientation);
 
                 // The x-axis is all we care about here.
-                notifyCompassChangeListeners((float) Math.toDegrees(orientation[0]));
+                double[] v = new double[3];
+                v[0] = Math.toDegrees(orientation[0]);
+                notifyCompassChangeListeners(v);
 
                 // Update the compassUpdateNextTimestamp
                 compassUpdateNextTimestamp = currentTime + COMPASS_UPDATE_RATE_MS;
             }
 
-            private void notifyCompassChangeListeners(float heading) {
+            private void notifyCompassChangeListeners(double[] heading) {
                 events.success(heading);
-                lastHeading = heading;
+                lastHeading = (float) heading[0];
             }
 
             /**
